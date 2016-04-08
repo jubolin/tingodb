@@ -81,10 +81,10 @@ var files = [
 ];
 
 var slow = {
-	'shouldStreamDocumentsWithPauseAndResumeForFetching': 10000,
+	'shouldStreamDocumentsWithPauseAndResumeForFetching': 20000,
 	'shouldNotFailDueToStackOverflowEach': 30000,
 	'shouldNotFailDueToStackOverflowToArray': 30000,
-	'shouldStream10KDocuments': 60000
+	'shouldStream10KDocuments': 90000
 };
 
 describe('contrib', function () {
@@ -96,10 +96,10 @@ describe('contrib', function () {
 		configuration = new (config())();
 		configuration.start(done);
 	});
-	_(files).each(function (file) {
+	_.each(files,function (file) {
 		var tests = require(dir + '/' + file);
 		describe(file, function () {
-			_(tests).each(function (fn, name) {
+			_.each(tests,function (fn, name) {
 				if (typeof fn != 'function') return;
 				describe(name, function () {
 					var done;

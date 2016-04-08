@@ -1,12 +1,11 @@
 var assert = require('assert');
-var async = require('async');
 var fs = require('fs');
 var safe = require('safe');
 var tutils = require('./utils');
 var _ = require('lodash');
 var tingodb = require('../lib/main')({});
 
-(global.nofs?describe.skip:describe)('(FS) Compact', function () {
+describe('(FS) Compact', function () {
 	var db, coll, items, length, fsize;
 	function checkCount(done) {
 		coll.find().count(safe.sure(done, function (count) {
@@ -15,7 +14,7 @@ var tingodb = require('../lib/main')({});
 		}));
 	}
 	function checkData(done) {
-		async.forEachSeries(items, function (item, cb) {
+		safe.forEachSeries(items, function (item, cb) {
 			coll.findOne({ k: item.k }, safe.sure(cb, function (doc) {
 				if (item.x) {
 					assert.equal(doc, null);
@@ -53,7 +52,7 @@ var tingodb = require('../lib/main')({});
 			doc.v = _.random(101, 200);
 			return doc;
 		});
-		async.forEachSeries(docs, function (doc, cb) {
+		safe.forEachSeries(docs, function (doc, cb) {
 			coll.update({ k: doc.k }, doc, { w: 1 }, cb);
 		}, done);
 	});
@@ -83,7 +82,7 @@ var tingodb = require('../lib/main')({});
 			doc.v = _.random(201, 300);
 			return doc;
 		});
-		async.forEachSeries(docs, function (doc, cb) {
+		safe.forEachSeries(docs, function (doc, cb) {
 			coll.update({ k: doc.k }, doc, { upsert: true, w: 1 }, cb);
 		}, done);
 	});
@@ -120,7 +119,109 @@ var tingodb = require('../lib/main')({});
 	});
 });
 
-(global.nofs?describe.skip:describe)('(FS) Update+Hash', function () {
+describe('(FS) Hot Compact', function () {
+	var db, coll, items, length, fsize;
+	function checkCount(done) {
+		coll.find().count(safe.sure(done, function (count) {
+			assert.equal(count, length);
+			done();
+		}));
+	}
+	function checkData(done) {
+		safe.forEachSeries(items, function (item, cb) {
+			coll.findOne({ k: item.k }, safe.sure(cb, function (doc) {
+				if (item.x) {
+					assert.equal(doc, null);
+				} else {
+					assert.equal(doc.k, item.k);
+					assert.equal(doc.v, item.v);
+				}
+				cb();
+			}));
+		}, done);
+	}
+	it('Open database', function (done) {
+		tutils.getDb('test', true, safe.sure(done, function (_db) {
+			db = _db;
+			done();
+		}));
+	});
+	it('Create new collection', function (done) {
+		db.collection('test', {}, safe.sure(done, function (_coll) {
+			coll = _coll;
+			done();
+		}));
+	});
+	it('Add test data', function (done) {
+		items = _.times(100, function (n) {
+			return { k: n, v: _.random(100) };
+		});
+		length = items.length;
+		coll.insert(items, { w: 1 }, done);
+	});
+	it('Update some items', function (done) {
+		var docs = _.times(30, function () {
+			var idx = _.random(items.length - 1);
+			var doc = items[idx];
+			doc.v = _.random(101, 200);
+			return doc;
+		});
+		safe.forEachSeries(docs, function (doc, cb) {
+			coll.update({ k: doc.k }, doc, { w: 1 }, cb);
+		}, done);
+	});
+	it('Delete some items', function (done) {
+		var count = 50;
+		var keys = _.times(count, function () {
+			for (;;) {
+				var idx = _.random(items.length - 1);
+				var doc = items[idx];
+				if (!doc.x) {
+					doc.x = true;
+					return doc.k;
+				}
+			}
+		});
+		length -= count;
+		coll.remove({ k: { $in: keys } }, { w: 1 }, done);
+	});
+	it('Update some items again', function (done) {
+		var docs = _.times(30, function () {
+			var idx = _.random(items.length - 1);
+			var doc = items[idx];
+			if (doc.x) {
+				delete doc.x;
+				length++;
+			}
+			doc.v = _.random(201, 300);
+			return doc;
+		});
+		safe.forEachSeries(docs, function (doc, cb) {
+			coll.update({ k: doc.k }, doc, { upsert: true, w: 1 }, cb);
+		}, done);
+	});
+	it('Check count', checkCount);
+	it('Check data', checkData);
+	it('Remember collection size', function (done) {
+		fs.stat(coll._filename, safe.sure(done, function (stats) {
+			fsize = stats.size;
+			done();
+		}));
+	});
+	it('Compact database', function (done) {
+		db.compactDatabase(done);
+	});
+	it('Check count after reopening db', checkCount);
+	it('Check data after reopening db', checkData);
+	it('Check collection size', function (done) {
+		fs.stat(coll._filename, safe.sure(done, function (stats) {
+			assert(stats.size < fsize);
+			done();
+		}));
+	});
+});
+
+describe('(FS) Update+Hash', function () {
 	var db, coll, fsize;
 	it('Open database', function (done) {
 		tutils.getDb('test', true, safe.sure(done, function (_db) {
@@ -181,18 +282,18 @@ var tingodb = require('../lib/main')({});
 	});
 });
 
-(global.nofs?describe.skip:describe)('(FS) Store', function () {
+describe('(FS) Store', function () {
 	var db, coll, fsize;
 	it('Operations must fail if db is linked to not existent path', function (done) {
 		var Db = tingodb.Db;
-		var db = new Db('/tmp/some_unexistant_path_667676qwe', {})
+		var db = new Db('/tmp/some_unexistant_path_667676qwe', {});
 		var c = db.collection( 'test' );
 		c.remove( {}, function (err) {
-			assert(err)
+			assert(err);
 			c.insert( {  name: 'Chiara',    surname: 'Mobily',     age: 22 } , function( err ){
 				assert(err);
 				done();
-			})
-		})
+			});
+		});
 	});
 });

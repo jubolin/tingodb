@@ -4,7 +4,7 @@ var path = require('path');
 
 var Mocha = require('mocha');
 var mocha = new Mocha();
-var async = require('async');
+var safe = require('safe');
 
 var optimist = require('optimist')
 	.default('reporter','dot')
@@ -17,6 +17,7 @@ var optimist = require('optimist')
 	.alias('q', 'quick')
 	.describe('quick', 'Run only quick tests')
 	.describe('single', 'Run only single file')
+	.describe('default', 'Run only default configuration check')
 	.check(function (argv) {
 		return argv.db == 'tingodb' || argv.db == 'mongodb';
 	})
@@ -47,15 +48,17 @@ var files = [
 	"update-test.js"
 ];
 var tingo = [
-	'compact-test.js'
+	'compact-test.js',
+	'integrity-test.js'
 ];
+
 var slow = [
 	'import-test.js',
 	'contrib-test.js'
 ];
 
 if (argv.single) {
-	files = [argv.single]
+	files = [argv.single];
 } else {
 	if (!config.mongo) files = files.concat(tingo);
 	if (!argv.quick) files = files.concat(slow);
@@ -88,7 +91,7 @@ var sessions = [
 	}
 ]
 
-if (!config.mongo) {
+if (!config.mongo && !argv.default) {
 	sessions.push(function (cb) {
 		console.log('Using global searchInArray');
 		tutils.setConfig({ searchInArray: true , nativeObjectID: false });
@@ -100,7 +103,8 @@ if (!config.mongo) {
 		run(cb);
 	})
 	sessions.push(function (cb) {
-		global.nofs = true;
+		mocha.grep(/(FS)/);
+		mocha.invert();
 		console.log('InMemory using defaults');
 		tutils.setConfig({ memStore:true });
 		run(cb);
@@ -117,4 +121,4 @@ if (!config.mongo) {
 	})
 }
 
-async.series(sessions, function () { process.exit(0)});
+safe.series(sessions, function (err) { if (err) console.log(err); process.exit(0)});

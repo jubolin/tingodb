@@ -1,9 +1,12 @@
 var assert = require('assert');
+var fs = require('fs');
 var safe = require('safe');
-var tutils = require("./utils");
+var tutils = require('./utils');
+var _ = require('lodash');
+var tingodb = require('../lib/main')({});
 
-describe('Delete', function () {
-	var db, coll, items, length;
+describe('(FS) Corrupted DB Load', function () {
+	var db, coll, items, length, fsize;
 	function checkCount(done) {
 		coll.find().count(safe.sure(done, function (count) {
 			assert.equal(count, length);
@@ -11,7 +14,7 @@ describe('Delete', function () {
 		}));
 	}
 	function checkData(done) {
-		safe.forEach(items, function (item, cb) {
+		safe.forEachSeries(items, function (item, cb) {
 			coll.findOne({ k: item.k }, safe.sure(cb, function (doc) {
 				if (item.x) {
 					assert.equal(doc, null);
@@ -29,34 +32,28 @@ describe('Delete', function () {
 			done();
 		}));
 	});
-	it('Create new collection', function (done) {
+	it('Create new collection with data', function (done) {
 		db.collection('test', {}, safe.sure(done, function (_coll) {
 			coll = _coll;
-			done();
+			items = _.times(100, function (n) {
+				return { k: n, v: _.random(100) };
+			});
+			length = items.length;
+			coll.insert(items, { w: 1 }, done);
 		}));
-	});
-	it('Add test data', function (done) {
-		items = [ { k: 1, v: 123 }, { k: 2, v: 456 }, { k: 3, v: 789 }, { k: 4, v: 111 } ];
-		length = items.length;
-		coll.insert(items, { w: 1 }, done);
 	});
 	it('Check count', checkCount);
 	it('Check data', checkData);
-	it('Delete items', function (done) {
-		items[1].x = true;
-		items[3].x = true;
-		var keys = items.filter(function (x) {
-			return x.x;
-		}).map(function (x) {
-			return x.k;
-		});
-		length -= keys.length;
-		coll.remove({ k: { $in: keys } }, { w: 1 }, done);
-	});
-	it('Check count after remove', checkCount);
-	it('Check data after remove', checkData);
-	it('Close database', function (done) {
-		db.close(done);
+	it('Close database and trunkate collection file', function (done) {
+		db.close(safe.sure(done, function () {
+			fs.stat(coll._filename, safe.sure(done, function (stats) {
+				fs.open(coll._filename, 'r+', safe.sure(done, function (fd) {
+					items = items.slice(0,99);
+					length--;
+					fs.truncate(fd, stats.size-100, done);
+				}));
+			}));
+		}));
 	});
 	it('Reopen database', function (done) {
 		tutils.getDb('test', false, safe.sure(done, function (_db) {
@@ -70,6 +67,6 @@ describe('Delete', function () {
 			done();
 		}));
 	});
-	it('Check count after reopening db', checkCount);
-	it('Check data after reopening db', checkData);
+	it('Check count', checkCount);
+	it('Check data', checkData);
 });

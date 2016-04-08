@@ -1,6 +1,5 @@
 var assert = require('assert');
 var _ = require('lodash');
-var async = require('async');
 var safe = require('safe');
 var tutils = require("./utils");
 
@@ -30,7 +29,7 @@ describe('Search Array', function () {
 		});
 		it("Populated with test data", function (done) {
 			var i=1;
-			async.whilst(function () { return i<=num; },
+			safe.whilst(function () { return i<=num; },
 				function (cb) {
 					var arr = [], arr2=[], j, obj;
 					for (j=i; j<i+10; j++) {
@@ -45,11 +44,11 @@ describe('Search Array', function () {
 					for (j=0; j<10; j++) {
 						arr[j].sub.arr = arr2;
 					}
-					obj = {num:i, pum:i, arr:arr, tags:["tag"+i,"tag"+(i+1)], nested:{tags:["tag"+i,"tag"+(i+1)]}};
+					obj = {num:i, pum:i, arr:arr, nags:["tag"+i,"tag"+(i+1)], tags:["tag"+i,"tag"+(i+1)], nested:{tags:["tag"+i,"tag"+(i+1)]}};
 					coll.insert(obj, cb);
 					i++;
 				},
-				safe.sure(done, done)
+				done
 			);
 		});
 		it("has proper size", function (done) {
@@ -277,6 +276,18 @@ describe('Search Array', function () {
 		it("find flat array {'tags':'tag2'} (index)", function (done) {
 			coll.find({'tags':'tag2'}).toArray(safe.sure(done, function (docs) {
 				assert.equal(docs.length, 2);
+				done();
+			}));
+		});
+		it("find flat array {'tags':{'$regex':'tag1.'}} (index)", function (done) {
+			coll.find({'tags':{'$regex':'tag1.'}},{"_tiar.tags":0}).toArray(safe.sure(done, function (docs) {
+				assert.equal(docs.length, 13);
+				done();
+			}));
+		});
+		it("find flat array {'nags':{'$regex':'tag'}} (no index)", function (done) {
+			coll.find({'nags':{'$regex':'tag1.'}},{"_tiar.nags":0}).toArray(safe.sure(done, function (docs) {
+				assert.equal(docs.length, 13);
 				done();
 			}));
 		});
